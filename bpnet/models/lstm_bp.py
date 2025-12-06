@@ -16,7 +16,7 @@ import torch.nn as nn
 
 @dataclass
 class ECG2BPConfig:
-    """All hyperparameters in one place so experiments stay organized."""
+    """Default hyperparameters"""
 
     input_channels: int = 1  # Single-channel ECG by default.
     conv_channels: int = 32  # Number of filters in each conv layer.
@@ -31,7 +31,6 @@ class ECG2BPConfig:
 
 class ConvFeatureExtractor(nn.Module):
     """Lightweight 1D CNN that learns local ECG morphology."""
-
     def __init__(
         self,
         in_channels: int,

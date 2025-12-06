@@ -81,7 +81,7 @@ def train_on_mock(
         model.train()
         total_loss = 0.0
         for inputs, targets in loader:
-            # Standard training recipe: forward, loss, backward, optimizer step.
+            # forward, loss, backward, optimizer step.
             optimizer.zero_grad()
             preds = model(inputs.to(device))
             loss = criterion(preds, targets.to(device))
