@@ -15,4 +15,4 @@ jobs:
       - name: Run MATLAB script
         uses: matlab-actions/run-command@v2
         with:
-          command: run('run_pulsedb.m')
+          command: run('bpnet/Generate_Subsets.m')
