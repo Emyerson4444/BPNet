@@ -2,7 +2,6 @@ name: Run MATLAB Script
 
 on:
   workflow_dispatch:   # Allows you to run manually
-  push:                # Or run on push if you want
 
 jobs:
   run-matlab:
