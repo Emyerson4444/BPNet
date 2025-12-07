@@ -1,0 +1,18 @@
+name: Run MATLAB Script
+
+on:
+  workflow_dispatch:   # Allows you to run manually
+  push:                # Or run on push if you want
+
+jobs:
+  run-matlab:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Run MATLAB script
+        uses: matlab-actions/run-command@v2
+        with:
+          command: run('run_pulsedb.m')
