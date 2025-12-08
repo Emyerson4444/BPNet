@@ -6,25 +6,27 @@ clear;clc;
 % the original MIMIC-III matched subset.
 % Locate segment files
 MIMIC_Path='Segment_Files/PulseDB_MIMIC';
-Vital_Path='Segment_Files/PulseDB_Vital';
+Vital_Path= "C:/Users/emyer/OneDrive/Documents/Semester 3/csci1470-course/BPNet/PulseDB_Vital.001";
+
 
 % Locate info files
-Train_Info='Info_Files/Train_Info';
-CalBased_Test_Info='Info_Files/CalBased_Test_Info';
-CalFree_Test_Info='Info_Files/CalFree_Test_Info';
-AAMI_Test_Info='Info_Files/AAMI_Test_Info';
-AAMI_Cal_Info='Info_Files/AAMI_Cal_Info';
+info_path = "C:/Users/emyer/OneDrive/Documents/Semester 3/csci1470-course/BPNet/Info_Files";
+Train_Info= info_path + "/Train_Info";
+CalBased_Test_Info= info_path + "/CalBased_Test_Info";
+CalFree_Test_Info= info_path + "/CalFree_Test_Info";
+AAMI_Test_Info= info_path + "/AAMI_Test_Info";
+AAMI_Cal_Info= info_path + "/AAMI_Cal_Info";
 
 % Generate training set
 Generate_Subset(MIMIC_Path,Vital_Path,Train_Info,'Subset_Files/Train_Subset')
-% Generate calibration-based testing set
-Generate_Subset(MIMIC_Path,Vital_Path,CalBased_Test_Info,'Subset_Files/CalBased_Test_Subset')
-% Generate calibration-free testing set
-Generate_Subset(MIMIC_Path,Vital_Path,CalFree_Test_Info,'Subset_Files/CalFree_Test_Subset')
-% Generate AAMI testing set
-Generate_Subset(MIMIC_Path,Vital_Path,AAMI_Test_Info,'Subset_Files/AAMI_Test_Subset')
-% Generate AAMI calibration set
-Generate_Subset(MIMIC_Path,Vital_Path,AAMI_Cal_Info,'Subset_Files/AAMI_Cal_Subset')
+// % Generate calibration-based testing set
+// Generate_Subset(MIMIC_Path,Vital_Path,CalBased_Test_Info,'Subset_Files/CalBased_Test_Subset')
+// % Generate calibration-free testing set
+// Generate_Subset(MIMIC_Path,Vital_Path,CalFree_Test_Info,'Subset_Files/CalFree_Test_Subset')
+// % Generate AAMI testing set
+// Generate_Subset(MIMIC_Path,Vital_Path,AAMI_Test_Info,'Subset_Files/AAMI_Test_Subset')
+// % Generate AAMI calibration set
+// Generate_Subset(MIMIC_Path,Vital_Path,AAMI_Cal_Info,'Subset_Files/AAMI_Cal_Subset')
 %% Generating supplementary trainining, calibration, and testing subsets from only VitalDB subjects
 % Locate info files
 VitalDB_Train_Info='Supplementary_Info_Files/VitalDB_Train_Info';
@@ -33,18 +35,16 @@ VitalDB_CalFree_Test_Info='Supplementary_Info_Files/VitalDB_CalFree_Test_Info';
 VitalDB_AAMI_Test_Info='Supplementary_Info_Files/VitalDB_AAMI_Test_Info';
 VitalDB_AAMI_Cal_Info='Supplementary_Info_Files/VitalDB_AAMI_Cal_Info';
 
-% Generate training set
-Generate_Subset(MIMIC_Path,Vital_Path,VitalDB_Train_Info,'Supplementary_Subset_Files/VitalDB_Train_Subset')
-% Generate calibration-based testing set
-Generate_Subset(MIMIC_Path,Vital_Path,VitalDB_CalBased_Test_Info,'Supplementary_Subset_Files/VitalDB_CalBased_Test_Subset')
-% Generate calibration-free testing set
-Generate_Subset(MIMIC_Path,Vital_Path,VitalDB_CalFree_Test_Info,'Supplementary_Subset_Files/VitalDB_CalFree_Test_Subset')
-% Generate AAMI testing set
-Generate_Subset(MIMIC_Path,Vital_Path,VitalDB_AAMI_Test_Info,'Supplementary_Subset_Files/VitalDB_AAMI_Test_Subset')
-% Generate AAMI calibration set
-Generate_Subset(MIMIC_Path,Vital_Path,VitalDB_AAMI_Cal_Info,'Supplementary_Subset_Files/VitalDB_AAMI_Cal_Subset')
-
-
+// % Generate training set
+// Generate_Subset(MIMIC_Path,Vital_Path,VitalDB_Train_Info,'Supplementary_Subset_Files/VitalDB_Train_Subset')
+// % Generate calibration-based testing set
+// Generate_Subset(MIMIC_Path,Vital_Path,VitalDB_CalBased_Test_Info,'Supplementary_Subset_Files/VitalDB_CalBased_Test_Subset')
+// % Generate calibration-free testing set
+// Generate_Subset(MIMIC_Path,Vital_Path,VitalDB_CalFree_Test_Info,'Supplementary_Subset_Files/VitalDB_CalFree_Test_Subset')
+// % Generate AAMI testing set
+// Generate_Subset(MIMIC_Path,Vital_Path,VitalDB_AAMI_Test_Info,'Supplementary_Subset_Files/VitalDB_AAMI_Test_Subset')
+// % Generate AAMI calibration set
+// Generate_Subset(MIMIC_Path,Vital_Path,VitalDB_AAMI_Cal_Info,'Supplementary_Subset_Files/VitalDB_AAMI_Cal_Subset')
 
 
 
@@ -84,11 +84,13 @@ for i=1:numel(Subjects)
     Subj_Name=Subjects{i};
     Subj_ID=Subj_Name(1:7);
     Source=str2double(Subj_Name(end));
-    if Source==0
-        Segment_Path=MIMIC_Path;
-    elseif Source==1
-        Segment_Path=Vital_Path;
-    end
+    // if Source==0
+    //     Segment_Path=MIMIC_Path;
+    // elseif Source==1
+    //     Segment_Path=Vital_Path;
+    // end
+    Segment_Path = Vital_Path;   % <-- Always use VitalDB
+    Source = 1;                  % <-- Pretend all are Vital
     
     
     
