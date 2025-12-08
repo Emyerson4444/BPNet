@@ -16,7 +16,6 @@ CalBased_Test_Info= info_path + "/CalBased_Test_Info.mat";
 CalFree_Test_Info= info_path + "/CalFree_Test_Info.mat";
 AAMI_Test_Info= info_path + "/AAMI_Test_Info.mat";
 AAMI_Cal_Info= info_path + "/AAMI_Cal_Info.mat";
-
 % Generate training set
 Generate_Subset(MIMIC_Path,Vital_Path,Train_Info,'Subset_Files/Train_Subset')
 
