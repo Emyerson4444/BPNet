@@ -11,22 +11,14 @@ Vital_Path= "C:/Users/emyer/OneDrive/Documents/Semester 3/csci1470-course/BPNet/
 
 % Locate info files
 info_path = "C:/Users/emyer/OneDrive/Documents/Semester 3/csci1470-course/BPNet/Info_Files";
-Train_Info= info_path + "/Train_Info";
-CalBased_Test_Info= info_path + "/CalBased_Test_Info";
-CalFree_Test_Info= info_path + "/CalFree_Test_Info";
-AAMI_Test_Info= info_path + "/AAMI_Test_Info";
-AAMI_Cal_Info= info_path + "/AAMI_Cal_Info";
+Train_Info= info_path + "/Train_Info.mat";
+CalBased_Test_Info= info_path + "/CalBased_Test_Info.mat";
+CalFree_Test_Info= info_path + "/CalFree_Test_Info.mat";
+AAMI_Test_Info= info_path + "/AAMI_Test_Info.mat";
+AAMI_Cal_Info= info_path + "/AAMI_Cal_Info.mat";
 
 % Generate training set
 Generate_Subset(MIMIC_Path,Vital_Path,Train_Info,'Subset_Files/Train_Subset')
-
-%% Generating supplementary trainining, calibration, and testing subsets from only VitalDB subjects
-% Locate info files
-VitalDB_Train_Info='Supplementary_Info_Files/VitalDB_Train_Info';
-VitalDB_CalBased_Test_Info='Supplementary_Info_Files/VitalDB_CalBased_Test_Info';
-VitalDB_CalFree_Test_Info='Supplementary_Info_Files/VitalDB_CalFree_Test_Info';
-VitalDB_AAMI_Test_Info='Supplementary_Info_Files/VitalDB_AAMI_Test_Info';
-VitalDB_AAMI_Cal_Info='Supplementary_Info_Files/VitalDB_AAMI_Cal_Info';
 
 
 
