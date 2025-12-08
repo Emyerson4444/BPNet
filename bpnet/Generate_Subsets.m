@@ -6,11 +6,11 @@ clear;clc;
 % the original MIMIC-III matched subset.
 % Locate segment files
 MIMIC_Path='Segment_Files/PulseDB_MIMIC';
-Vital_Path= "C:/Users/emyer/OneDrive/Documents/Semester 3/csci1470-course/BPNet/PulseDB_Vital.001";
+Vital_Path= "C:/Users/emyer/OneDrive/Documents/Semester_3/csci1470-course/BPNet/PulseDB_Vital.001";
 
 
 % Locate info files
-info_path = "C:/Users/emyer/OneDrive/Documents/Semester 3/csci1470-course/BPNet/Info_Files";
+info_path = "C:/Users/emyer/OneDrive/Documents/Semester_3/csci1470-course/BPNet/Info_Files";
 Train_Info= info_path + "/Train_Info.mat";
 CalBased_Test_Info= info_path + "/CalBased_Test_Info.mat";
 CalFree_Test_Info= info_path + "/CalFree_Test_Info.mat";
