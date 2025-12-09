@@ -1,7 +1,7 @@
 """
 Command-line trainer for BPNet's ECG->BP model.
 
-Adds richer logging/metrics and partial-dataset options so each run yields more insight.
+Adds richer logging/metrics so each training run captures more insight.
 """
 from __future__ import annotations
 
@@ -85,7 +85,7 @@ def train_one_epoch(
     total_loss = 0.0
     preds_history = [] if collect_stats else None
     targets_history = [] if collect_stats else None
-    progress_iter = tqdm(loader, desc=f"Train Epoch {epoch}", ncols=80, leave=False)
+    progress_iter = tqdm(loader, desc=f"Train Epoch {epoch}", leave=False, ncols=80)
     for batch_idx, (inputs, targets) in enumerate(progress_iter):
         inputs = inputs.to(device)
         targets = targets.to(device)
