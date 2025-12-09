@@ -11,7 +11,7 @@
 # Load conda / Python environment (adjust module if needed)
 module load miniconda3/23.11.0s
 source ~/.bashrc
-conda activate bpnet        # or source /course/cs1470/cs1470_env/bin/activate
+source /course/cs1470/cs1470_env/bin/activate
 
 echo "Job started at: $(date)"
 echo "Node: $SLURM_NODELIST"

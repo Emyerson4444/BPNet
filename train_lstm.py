@@ -1,7 +1,7 @@
 """
 Command-line trainer for BPNet's ECG->BP model.
 
-Adds richer logging/metrics so each training run captures more insight.
+Adds richer logging/metrics and partial-dataset options so each run yields more insight.
 """
 from __future__ import annotations
 
@@ -14,8 +14,9 @@ from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 from bpnet.data import PulseDBSequenceDataset
 from bpnet.models.lstm_bp import ECG2BP, ECG2BPConfig
@@ -34,6 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", help="Checkpoint path to resume from")
     parser.add_argument("--skip_input_norm", action="store_true", help="Disable per-segment ECG z-scoring")
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
+    parser.add_argument("--sample_dump_limit", type=int, default=5, help="Segments to dump for qualitative review each epoch")
+    parser.add_argument("--train_fraction", type=float, default=1.0, help="Fraction of training data to use (0-1]")
     # Model hyperparameters
     parser.add_argument("--conv_channels", type=int, default=32)
     parser.add_argument("--conv_kernel", type=int, default=7)
@@ -42,7 +45,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lstm_layers", type=int, default=2)
     parser.add_argument("--lstm_dropout", type=float, default=0.1)
     parser.add_argument("--bidirectional", action="store_true")
-    parser.add_argument("--sample_dump_limit", type=int, default=5, help="Segments to dump for qualitative review each epoch")
     return parser.parse_args()
 
 
@@ -52,8 +54,14 @@ def create_dataloader(
     shuffle: bool,
     num_workers: int,
     normalize_input: bool,
+    fraction: float = 1.0,
 ) -> DataLoader:
     dataset = PulseDBSequenceDataset(mat_path=mat_path, normalize_input=normalize_input)
+    if fraction < 1.0:
+        fraction = max(0.0, min(1.0, fraction))
+        subset_size = max(1, int(len(dataset) * fraction))
+        indices = np.random.permutation(len(dataset))[:subset_size]
+        dataset = Subset(dataset, indices.tolist())
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -71,14 +79,14 @@ def train_one_epoch(
     device: torch.device,
     max_grad_norm: float,
     collect_stats: bool = False,
+    epoch: int = 0,
 ) -> Tuple[float, Optional[Dict[str, float]], Optional[np.ndarray], Optional[np.ndarray]]:
-    """Run training loop and optionally gather predictions/targets for richer metrics."""
     model.train()
     total_loss = 0.0
     preds_history = [] if collect_stats else None
     targets_history = [] if collect_stats else None
-
-    for inputs, targets in loader:
+    progress_iter = tqdm(loader, desc=f"Train Epoch {epoch}", ncols=80, leave=False)
+    for batch_idx, (inputs, targets) in enumerate(progress_iter):
         inputs = inputs.to(device)
         targets = targets.to(device)
         optimizer.zero_grad()
@@ -91,6 +99,8 @@ def train_one_epoch(
         if collect_stats:
             preds_history.append(preds.detach().cpu().numpy())
             targets_history.append(targets.detach().cpu().numpy())
+        else:
+            progress_iter.set_postfix({"loss": f"{loss.item():.4f}"})
 
     metrics = None
     all_targets = None
@@ -100,7 +110,6 @@ def train_one_epoch(
         all_targets = np.concatenate(targets_history, axis=0)
         metrics = compute_metrics(all_targets, all_preds)
         metrics["loss"] = total_loss / len(loader.dataset)
-
     return total_loss / len(loader.dataset), metrics, all_targets, all_preds
 
 
@@ -192,6 +201,7 @@ def main() -> None:
         shuffle=True,
         num_workers=args.num_workers,
         normalize_input=not args.skip_input_norm,
+        fraction=args.train_fraction,
     )
     val_loader = (
         create_dataloader(
@@ -200,6 +210,7 @@ def main() -> None:
             shuffle=False,
             num_workers=args.num_workers,
             normalize_input=not args.skip_input_norm,
+            fraction=1.0,
         )
         if args.val_mat
         else None
@@ -222,6 +233,9 @@ def main() -> None:
     writer = SummaryWriter(log_dir=str(log_dir))
     save_config(log_dir, args)
     checkpoint_dir = ensure_dir(args.checkpoint_dir)
+    print(f"Training samples: {len(train_loader.dataset)} (fraction={args.train_fraction})")
+    if val_loader is not None:
+        print(f"Validation samples: {len(val_loader.dataset)}")
 
     for epoch in range(start_epoch, args.epochs + 1):
         train_loss, train_metrics, train_targets, train_preds = train_one_epoch(
@@ -232,6 +246,7 @@ def main() -> None:
             device,
             args.max_grad_norm,
             collect_stats=True,
+            epoch=epoch,
         )
         writer.add_scalar("Loss/train", train_loss, epoch)
         if train_metrics:
