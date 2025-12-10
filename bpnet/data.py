@@ -46,6 +46,15 @@ def load_subset(mat_path: str | Path) -> dict:
     mat_path = Path(mat_path)
     if not mat_path.exists():
         raise FileNotFoundError(f"Subset file not found: {mat_path}")
+
+    if mat_path.suffix.lower() == ".npz":
+        subset = np.load(mat_path)
+        signals = subset["signals"].astype(np.float32)
+        sbp = subset["sbp"].astype(np.float32)
+        dbp = subset["dbp"].astype(np.float32)
+        subjects = subset["subjects"].astype(str)
+        return {"signals": signals, "sbp": sbp, "dbp": dbp, "subjects": subjects}
+
     data = loadmat(str(mat_path))
     if "Subset" not in data:
         raise KeyError(f"Key 'Subset' missing in MATLAB file {mat_path}")

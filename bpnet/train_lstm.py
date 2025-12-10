@@ -37,6 +37,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
     parser.add_argument("--sample_dump_limit", type=int, default=5, help="Segments to dump for qualitative review each epoch")
     parser.add_argument("--train_fraction", type=float, default=1.0, help="Fraction of training data to use (0-1]")
+    parser.add_argument("--val_fraction", type=float, default=1.0, help="Fraction of validation data to use (0-1]")
     # Model hyperparameters
     parser.add_argument("--conv_channels", type=int, default=32)
     parser.add_argument("--conv_kernel", type=int, default=7)
@@ -210,7 +211,7 @@ def main() -> None:
             shuffle=False,
             num_workers=args.num_workers,
             normalize_input=not args.skip_input_norm,
-            fraction=1.0,
+            fraction=args.val_fraction,
         )
         if args.val_mat
         else None
@@ -235,7 +236,7 @@ def main() -> None:
     checkpoint_dir = ensure_dir(args.checkpoint_dir)
     print(f"Training samples: {len(train_loader.dataset)} (fraction={args.train_fraction})")
     if val_loader is not None:
-        print(f"Validation samples: {len(val_loader.dataset)}")
+        print(f"Validation samples: {len(val_loader.dataset)} (fraction={args.val_fraction})")
 
     for epoch in range(start_epoch, args.epochs + 1):
         train_loss, train_metrics, train_targets, train_preds = train_one_epoch(
