@@ -1,0 +1,13 @@
+
+EnvironmentNameNotFound: Could not find conda environment: bpnet
+You can list all discoverable environments with `conda info --envs`.
+
+
+Traceback (most recent call last):
+  File "/oscar/runtime/software/external/miniconda3/23.11.0/lib/python3.10/runpy.py", line 196, in _run_module_as_main
+    return _run_code(code, main_globals, None,
+  File "/oscar/runtime/software/external/miniconda3/23.11.0/lib/python3.10/runpy.py", line 86, in _run_code
+    exec(code, run_globals)
+  File "/oscar/home/sndichu/BPNet/bpnet/train_lstm.py", line 16, in <module>
+    import numpy as np
+ModuleNotFoundError: No module named 'numpy'
