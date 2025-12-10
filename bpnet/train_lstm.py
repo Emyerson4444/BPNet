@@ -1,29 +1,28 @@
 """
 Command-line trainer for BPNet's ECG->BP model.
 
-This script is intentionally explicit: parse arguments, build datasets,
-train/validate, and save checkpoints.  Students can copy/paste sections
-for experiments without hunting through hidden helpers.
+Adds richer logging/metrics so each training run captures more insight.
 """
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import math
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Optional, Tuple
 
 import numpy as np
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
 
 from bpnet.data import PulseDBSequenceDataset
 from bpnet.models.lstm_bp import ECG2BP, ECG2BPConfig
 
 
 def parse_args() -> argparse.Namespace:
-    """Define the command-line interface."""
     parser = argparse.ArgumentParser(description="Train ECG2BP on PulseDB.")
     parser.add_argument("--train_mat", required=True, help="Path to training subset .mat")
     parser.add_argument("--val_mat", help="Optional validation subset .mat")
@@ -36,6 +35,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--resume", help="Checkpoint path to resume from")
     parser.add_argument("--skip_input_norm", action="store_true", help="Disable per-segment ECG z-scoring")
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
+    parser.add_argument("--sample_dump_limit", type=int, default=5, help="Segments to dump for qualitative review each epoch")
+    parser.add_argument("--train_fraction", type=float, default=1.0, help="Fraction of training data to use (0-1]")
     # Model hyperparameters
     parser.add_argument("--conv_channels", type=int, default=32)
     parser.add_argument("--conv_kernel", type=int, default=7)
@@ -53,9 +54,14 @@ def create_dataloader(
     shuffle: bool,
     num_workers: int,
     normalize_input: bool,
+    fraction: float = 1.0,
 ) -> DataLoader:
-    """Helper to build a DataLoader with consistent settings."""
     dataset = PulseDBSequenceDataset(mat_path=mat_path, normalize_input=normalize_input)
+    if fraction < 1.0:
+        fraction = max(0.0, min(1.0, fraction))
+        subset_size = max(1, int(len(dataset) * fraction))
+        indices = np.random.permutation(len(dataset))[:subset_size]
+        dataset = Subset(dataset, indices.tolist())
     return DataLoader(
         dataset,
         batch_size=batch_size,
@@ -72,11 +78,15 @@ def train_one_epoch(
     criterion: torch.nn.Module,
     device: torch.device,
     max_grad_norm: float,
-) -> float:
-    """Run a single training epoch and return average loss."""
+    collect_stats: bool = False,
+    epoch: int = 0,
+) -> Tuple[float, Optional[Dict[str, float]], Optional[np.ndarray], Optional[np.ndarray]]:
     model.train()
     total_loss = 0.0
-    for inputs, targets in loader:
+    preds_history = [] if collect_stats else None
+    targets_history = [] if collect_stats else None
+    progress_iter = tqdm(loader, desc=f"Train Epoch {epoch}", leave=False, ncols=80)
+    for batch_idx, (inputs, targets) in enumerate(progress_iter):
         inputs = inputs.to(device)
         targets = targets.to(device)
         optimizer.zero_grad()
@@ -86,7 +96,21 @@ def train_one_epoch(
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_grad_norm)
         optimizer.step()
         total_loss += loss.item() * inputs.size(0)
-    return total_loss / len(loader.dataset)
+        if collect_stats:
+            preds_history.append(preds.detach().cpu().numpy())
+            targets_history.append(targets.detach().cpu().numpy())
+        else:
+            progress_iter.set_postfix({"loss": f"{loss.item():.4f}"})
+
+    metrics = None
+    all_targets = None
+    all_preds = None
+    if collect_stats and preds_history:
+        all_preds = np.concatenate(preds_history, axis=0)
+        all_targets = np.concatenate(targets_history, axis=0)
+        metrics = compute_metrics(all_targets, all_preds)
+        metrics["loss"] = total_loss / len(loader.dataset)
+    return total_loss / len(loader.dataset), metrics, all_targets, all_preds
 
 
 def evaluate(
@@ -95,7 +119,6 @@ def evaluate(
     criterion: torch.nn.Module,
     device: torch.device,
 ) -> Dict[str, float]:
-    """Compute validation loss, MAE, and correlation."""
     model.eval()
     total_loss = 0.0
     preds_list = []
@@ -107,15 +130,23 @@ def evaluate(
             total_loss += loss.item() * inputs.size(0)
             preds_list.append(outputs.cpu().numpy())
             targets_list.append(targets.numpy())
-    preds = np.concatenate(preds_list, axis=0).reshape(-1)
-    targets = np.concatenate(targets_list, axis=0).reshape(-1)
-    corr = float(np.corrcoef(preds, targets)[0, 1]) if np.std(preds) > 0 and np.std(targets) > 0 else math.nan
-    mae = float(np.mean(np.abs(preds - targets)))
-    return {"loss": total_loss / len(loader.dataset), "mae": mae, "corr": corr}
+    preds = np.concatenate(preds_list, axis=0)
+    targets = np.concatenate(targets_list, axis=0)
+    metrics = compute_metrics(targets, preds)
+    metrics["loss"] = total_loss / len(loader.dataset)
+    return metrics
+
+
+def compute_metrics(targets: np.ndarray, preds: np.ndarray) -> Dict[str, float]:
+    preds_flat = preds.reshape(-1)
+    targets_flat = targets.reshape(-1)
+    mae = float(np.mean(np.abs(preds_flat - targets_flat)))
+    rmse = float(np.sqrt(np.mean((preds_flat - targets_flat) ** 2)))
+    corr = float(np.corrcoef(preds_flat, targets_flat)[0, 1]) if np.std(preds_flat) > 0 and np.std(targets_flat) > 0 else math.nan
+    return {"mae": mae, "rmse": rmse, "corr": corr}
 
 
 def prepare_model(args: argparse.Namespace, device: torch.device) -> ECG2BP:
-    """Instantiate the LSTM model using CLI hyperparameters."""
     config = ECG2BPConfig(
         conv_channels=args.conv_channels,
         conv_kernel=args.conv_kernel,
@@ -129,22 +160,38 @@ def prepare_model(args: argparse.Namespace, device: torch.device) -> ECG2BP:
 
 
 def ensure_dir(path: str | Path) -> Path:
-    """Create a folder if it does not exist yet and return the Path."""
     p = Path(path)
     p.mkdir(parents=True, exist_ok=True)
     return p
 
 
 def save_checkpoint(state: dict, checkpoint_dir: Path, is_best: bool = False) -> None:
-    """Persist training state so we can resume or deploy later."""
     epoch = state.get("epoch", 0)
     torch.save(state, checkpoint_dir / f"checkpoint_epoch_{epoch:03d}.pt")
     if is_best:
         torch.save(state, checkpoint_dir / "best.pt")
 
 
+def save_config(log_dir: Path, args: argparse.Namespace) -> None:
+    with (log_dir / "config.json").open("w", encoding="utf-8") as f:
+        json.dump(vars(args), f, indent=2, sort_keys=True)
+
+
+def save_sample_predictions(
+    epoch: int,
+    targets: Optional[np.ndarray],
+    preds: Optional[np.ndarray],
+    log_dir: Path,
+    limit: int = 5,
+) -> None:
+    if targets is None or preds is None:
+        return
+    limit = min(limit, targets.shape[0])
+    out_path = log_dir / f"epoch_{epoch:03d}_samples.npz"
+    np.savez(out_path, target_bp=targets[:limit], pred_bp=preds[:limit])
+
+
 def main() -> None:
-    """Main entry: parse args, load data, train/validate, log results."""
     args = parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -154,6 +201,7 @@ def main() -> None:
         shuffle=True,
         num_workers=args.num_workers,
         normalize_input=not args.skip_input_norm,
+        fraction=args.train_fraction,
     )
     val_loader = (
         create_dataloader(
@@ -162,6 +210,7 @@ def main() -> None:
             shuffle=False,
             num_workers=args.num_workers,
             normalize_input=not args.skip_input_norm,
+            fraction=1.0,
         )
         if args.val_mat
         else None
@@ -182,11 +231,29 @@ def main() -> None:
 
     log_dir = ensure_dir(Path(args.log_dir) / dt.datetime.now().strftime("%Y%m%d_%H%M%S"))
     writer = SummaryWriter(log_dir=str(log_dir))
+    save_config(log_dir, args)
     checkpoint_dir = ensure_dir(args.checkpoint_dir)
+    print(f"Training samples: {len(train_loader.dataset)} (fraction={args.train_fraction})")
+    if val_loader is not None:
+        print(f"Validation samples: {len(val_loader.dataset)}")
 
     for epoch in range(start_epoch, args.epochs + 1):
-        train_loss = train_one_epoch(model, train_loader, optimizer, criterion, device, args.max_grad_norm)
+        train_loss, train_metrics, train_targets, train_preds = train_one_epoch(
+            model,
+            train_loader,
+            optimizer,
+            criterion,
+            device,
+            args.max_grad_norm,
+            collect_stats=True,
+            epoch=epoch,
+        )
         writer.add_scalar("Loss/train", train_loss, epoch)
+        if train_metrics:
+            writer.add_scalar("MAE/train", train_metrics["mae"], epoch)
+            writer.add_scalar("RMSE/train", train_metrics["rmse"], epoch)
+            if not math.isnan(train_metrics["corr"]):
+                writer.add_scalar("Corr/train", train_metrics["corr"], epoch)
 
         val_metrics: Optional[Dict[str, float]] = None
         improved = False
@@ -194,10 +261,13 @@ def main() -> None:
             val_metrics = evaluate(model, val_loader, criterion, device)
             writer.add_scalar("Loss/val", val_metrics["loss"], epoch)
             writer.add_scalar("MAE/val", val_metrics["mae"], epoch)
+            writer.add_scalar("RMSE/val", val_metrics["rmse"], epoch)
             if not math.isnan(val_metrics["corr"]):
                 writer.add_scalar("Corr/val", val_metrics["corr"], epoch)
             improved = val_metrics["loss"] < best_val
             best_val = min(best_val, val_metrics["loss"])
+
+        save_sample_predictions(epoch, train_targets, train_preds, log_dir, limit=args.sample_dump_limit)
 
         save_checkpoint(
             {
@@ -206,6 +276,7 @@ def main() -> None:
                 "optimizer_state_dict": optimizer.state_dict(),
                 "best_val": best_val,
                 "train_loss": train_loss,
+                "train_metrics": train_metrics,
                 "val_metrics": val_metrics,
             },
             checkpoint_dir,
