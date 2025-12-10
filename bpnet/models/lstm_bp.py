@@ -22,9 +22,9 @@ class ECG2BPConfig:
     conv_channels: int = 32  # Number of filters in each conv layer.
     conv_kernel: int = 7  # Wide enough to cover multiple ECG samples per beat.
     conv_layers: int = 2  # Stack a couple of layers for richer features.
-    lstm_hidden_size: int = 128  # Dimensionality of the recurrent state.
-    lstm_layers: int = 2  # Multiple layers capture longer-term structure.
-    lstm_dropout: float = 0.1  # Dropout between LSTM layers (ignored for 1 layer).
+    lstm_hidden_size: int = 256  # Larger hidden state captures more context.
+    lstm_layers: int = 3  # Deeper LSTM to model longer temporal patterns.
+    lstm_dropout: float = 0.2  # Heavier dropout for the deeper stack.
     bidirectional: bool = False  # Keep False for causal predictions unless experimenting.
     output_size: int = 1  # Predict one blood-pressure value per timestep.
 

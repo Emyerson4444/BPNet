@@ -44,9 +44,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--conv_channels", type=int, default=32)
     parser.add_argument("--conv_kernel", type=int, default=7)
     parser.add_argument("--conv_layers", type=int, default=2)
-    parser.add_argument("--lstm_hidden_size", type=int, default=128)
-    parser.add_argument("--lstm_layers", type=int, default=2)
-    parser.add_argument("--lstm_dropout", type=float, default=0.1)
+    parser.add_argument("--lstm_hidden_size", type=int, default=256)
+    parser.add_argument("--lstm_layers", type=int, default=3)
+    parser.add_argument("--lstm_dropout", type=float, default=0.2)
     parser.add_argument("--bidirectional", action="store_true")
     return parser.parse_args()
 
