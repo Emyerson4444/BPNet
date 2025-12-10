@@ -6,9 +6,11 @@ Adds richer logging/metrics so each training run captures more insight.
 from __future__ import annotations
 
 import argparse
+import csv
 import datetime as dt
 import json
 import math
+from dataclasses import asdict
 from pathlib import Path
 from typing import Dict, Optional, Tuple
 
@@ -192,6 +194,57 @@ def save_sample_predictions(
     np.savez(out_path, target_bp=targets[:limit], pred_bp=preds[:limit])
 
 
+def init_metrics_csv(log_dir: Path) -> Path:
+    """Create a CSV file for human-readable metrics."""
+    csv_path = log_dir / "metrics.csv"
+    if not csv_path.exists():
+        with csv_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(
+                [
+                    "epoch",
+                    "train_loss",
+                    "train_mae",
+                    "train_rmse",
+                    "train_corr",
+                    "val_loss",
+                    "val_mae",
+                    "val_rmse",
+                    "val_corr",
+                ]
+            )
+    return csv_path
+
+
+def append_metrics_row(
+    csv_path: Path,
+    epoch: int,
+    train_loss: float,
+    train_metrics: Optional[Dict[str, float]],
+    val_metrics: Optional[Dict[str, float]],
+) -> None:
+    """Append a single epoch row to the CSV log."""
+
+    def metric_value(metric_dict: Optional[Dict[str, float]], key: str) -> Optional[float]:
+        if metric_dict is None:
+            return None
+        return metric_dict.get(key)
+
+    row = [
+        epoch,
+        train_loss,
+        metric_value(train_metrics, "mae"),
+        metric_value(train_metrics, "rmse"),
+        metric_value(train_metrics, "corr"),
+        metric_value(val_metrics, "loss"),
+        metric_value(val_metrics, "mae"),
+        metric_value(val_metrics, "rmse"),
+        metric_value(val_metrics, "corr"),
+    ]
+    with csv_path.open("a", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerow(row)
+
+
 def main() -> None:
     args = parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -233,6 +286,7 @@ def main() -> None:
     log_dir = ensure_dir(Path(args.log_dir) / dt.datetime.now().strftime("%Y%m%d_%H%M%S"))
     writer = SummaryWriter(log_dir=str(log_dir))
     save_config(log_dir, args)
+    csv_path = init_metrics_csv(log_dir)
     checkpoint_dir = ensure_dir(args.checkpoint_dir)
     print(f"Training samples: {len(train_loader.dataset)} (fraction={args.train_fraction})")
     if val_loader is not None:
@@ -270,6 +324,15 @@ def main() -> None:
 
         save_sample_predictions(epoch, train_targets, train_preds, log_dir, limit=args.sample_dump_limit)
 
+        append_metrics_row(csv_path, epoch, train_loss, train_metrics, val_metrics)
+        if val_metrics:
+            print(
+                f"Epoch {epoch:03d} | train_loss={train_loss:.4f} "
+                f"| val_loss={val_metrics['loss']:.4f} | val_corr={val_metrics['corr']:.3f}"
+            )
+        else:
+            print(f"Epoch {epoch:03d} | train_loss={train_loss:.4f}")
+
         save_checkpoint(
             {
                 "epoch": epoch,
@@ -279,6 +342,7 @@ def main() -> None:
                 "train_loss": train_loss,
                 "train_metrics": train_metrics,
                 "val_metrics": val_metrics,
+                "config": asdict(model.config),
             },
             checkpoint_dir,
             is_best=improved,
