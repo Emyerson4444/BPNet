@@ -1,0 +1,23 @@
+{
+  "batch_size": 32,
+  "bidirectional": false,
+  "checkpoint_dir": "checkpoints/oscar_npz_tuned",
+  "conv_channels": 32,
+  "conv_kernel": 7,
+  "conv_layers": 2,
+  "epochs": 30,
+  "log_dir": "runs/oscar_npz_tuned",
+  "lr": 0.001,
+  "lstm_dropout": 0.2,
+  "lstm_hidden_size": 256,
+  "lstm_layers": 3,
+  "max_grad_norm": 1.0,
+  "num_workers": 0,
+  "resume": null,
+  "sample_dump_limit": 5,
+  "skip_input_norm": false,
+  "train_fraction": 1.0,
+  "train_mat": "data/Subset_Files/VitalDB_Train_OSCAR.npz",
+  "val_fraction": 1.0,
+  "val_mat": "data/Subset_Files/VitalDB_Val_OSCAR.npz"
+}
