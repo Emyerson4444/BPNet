@@ -1,0 +1,17 @@
+{
+  "train_mat": "data/Subset_Files/VitalDB_Train_75k.npz",
+  "val_mat": "data/Subset_Files/VitalDB_Val_75k.npz",
+  "batch_size": 32,
+  "epochs": 20,
+  "lr": 0.001,
+  "train_fraction": 1.0,
+  "val_fraction": 1.0,
+  "skip_input_norm": false,
+  "conv_channels": 32,
+  "conv_kernel": 7,
+  "conv_layers": 2,
+  "lstm_hidden_size": 128,
+  "lstm_layers": 2,
+  "lstm_dropout": 0.1,
+  "log_dir": "runs/simple_oscar75k/20251211_083915"
+}
