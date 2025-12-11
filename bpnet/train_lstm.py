@@ -30,13 +30,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--val_mat", help="Optional validation subset .mat")
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=20)
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr", type=float, default=5e-4)
     parser.add_argument("--num_workers", type=int, default=0)
     parser.add_argument("--log_dir", default="runs/lstm")
     parser.add_argument("--checkpoint_dir", default="checkpoints")
     parser.add_argument("--resume", help="Checkpoint path to resume from")
     parser.add_argument("--skip_input_norm", action="store_true", help="Disable per-segment ECG z-scoring")
     parser.add_argument("--max_grad_norm", type=float, default=1.0)
+    parser.add_argument("--weight_decay", type=float, default=1e-4, help="Adam weight decay (L2)")
+    parser.add_argument("--plateau_patience", type=int, default=3, help="ReduceLROnPlateau patience (epochs)")
+    parser.add_argument("--plateau_factor", type=float, default=0.5, help="LR reduction factor on plateau")
+    parser.add_argument("--min_lr", type=float, default=1e-5, help="Minimum LR for scheduler")
     parser.add_argument("--sample_dump_limit", type=int, default=5, help="Segments to dump for qualitative review each epoch")
     parser.add_argument("--train_fraction", type=float, default=1.0, help="Fraction of training data to use (0-1]")
     parser.add_argument("--val_fraction", type=float, default=1.0, help="Fraction of validation data to use (0-1]")
@@ -203,6 +207,7 @@ def init_metrics_csv(log_dir: Path) -> Path:
             writer.writerow(
                 [
                     "epoch",
+                    "lr",
                     "train_loss",
                     "train_mae",
                     "train_rmse",
@@ -219,6 +224,7 @@ def init_metrics_csv(log_dir: Path) -> Path:
 def append_metrics_row(
     csv_path: Path,
     epoch: int,
+    current_lr: float,
     train_loss: float,
     train_metrics: Optional[Dict[str, float]],
     val_metrics: Optional[Dict[str, float]],
@@ -232,6 +238,7 @@ def append_metrics_row(
 
     row = [
         epoch,
+        current_lr,
         train_loss,
         metric_value(train_metrics, "mae"),
         metric_value(train_metrics, "rmse"),
@@ -272,7 +279,14 @@ def main() -> None:
 
     model = prepare_model(args, device)
     criterion = torch.nn.MSELoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+        optimizer,
+        mode="min",
+        patience=args.plateau_patience,
+        factor=args.plateau_factor,
+        min_lr=args.min_lr,
+    )
     start_epoch = 1
     best_val = math.inf
 
@@ -321,17 +335,21 @@ def main() -> None:
                 writer.add_scalar("Corr/val", val_metrics["corr"], epoch)
             improved = val_metrics["loss"] < best_val
             best_val = min(best_val, val_metrics["loss"])
+            scheduler.step(val_metrics["loss"])
+        else:
+            scheduler.step(train_loss)
 
         save_sample_predictions(epoch, train_targets, train_preds, log_dir, limit=args.sample_dump_limit)
 
-        append_metrics_row(csv_path, epoch, train_loss, train_metrics, val_metrics)
+        current_lr = optimizer.param_groups[0]["lr"]
+        append_metrics_row(csv_path, epoch, current_lr, train_loss, train_metrics, val_metrics)
         if val_metrics:
             print(
-                f"Epoch {epoch:03d} | train_loss={train_loss:.4f} "
+                f"Epoch {epoch:03d} | lr={current_lr:.2e} | train_loss={train_loss:.4f} "
                 f"| val_loss={val_metrics['loss']:.4f} | val_corr={val_metrics['corr']:.3f}"
             )
         else:
-            print(f"Epoch {epoch:03d} | train_loss={train_loss:.4f}")
+            print(f"Epoch {epoch:03d} | lr={current_lr:.2e} | train_loss={train_loss:.4f}")
 
         save_checkpoint(
             {
