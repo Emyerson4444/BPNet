@@ -9,6 +9,8 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import math
+import csv
+import json
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -115,6 +117,89 @@ def ensure_dir(path: str | Path) -> Path:
     return p
 
 
+def save_config(log_dir: Path, args: argparse.Namespace) -> None:
+    config = {
+        "train_mat": args.train_mat,
+        "val_mat": args.val_mat,
+        "batch_size": args.batch_size,
+        "epochs": args.epochs,
+        "lr": args.lr,
+        "train_fraction": args.train_fraction,
+        "val_fraction": args.val_fraction,
+        "skip_input_norm": args.skip_input_norm,
+        "conv_channels": 32,
+        "conv_kernel": 7,
+        "conv_layers": 2,
+        "lstm_hidden_size": 128,
+        "lstm_layers": 2,
+        "lstm_dropout": 0.1,
+        "log_dir": str(log_dir),
+    }
+    with (log_dir / "config.json").open("w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+
+
+def init_metrics_csv(log_dir: Path) -> Path:
+    csv_path = log_dir / "metrics.csv"
+    if not csv_path.exists():
+        with csv_path.open("w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow(["epoch", "train_loss", "val_loss", "val_mae", "val_corr"])
+    return csv_path
+
+
+def append_metrics_row(
+    csv_path: Path,
+    epoch: int,
+    train_loss: float,
+    val_metrics: Optional[Dict[str, float]],
+) -> None:
+    val_loss = val_metrics.get("loss") if val_metrics else None
+    val_mae = val_metrics.get("mae") if val_metrics else None
+    val_corr = val_metrics.get("corr") if val_metrics else None
+    row = [
+        epoch,
+        train_loss,
+        val_loss,
+        val_mae,
+        val_corr,
+    ]
+    with csv_path.open("a", newline="", encoding="utf-8") as f:
+        csv.writer(f).writerow(row)
+
+
+def save_sample_predictions(
+    epoch: int,
+    loader: Optional[DataLoader],
+    model: torch.nn.Module,
+    device: torch.device,
+    log_dir: Path,
+    limit: int = 5,
+) -> None:
+    if loader is None:
+        return
+    model.eval()
+    preds = []
+    targets = []
+    collected = 0
+    with torch.no_grad():
+        for inputs, target in loader:
+            inputs = inputs.to(device)
+            output = model(inputs).cpu().numpy()
+            preds.append(output)
+            targets.append(target.numpy())
+            collected += inputs.size(0)
+            if collected >= limit:
+                break
+    if not preds:
+        return
+    preds_arr = np.concatenate(preds, axis=0)[:limit]
+    targets_arr = np.concatenate(targets, axis=0)[:limit]
+    out_path = log_dir / f"epoch_{epoch:03d}_samples.npz"
+    np.savez(out_path, target_bp=targets_arr, pred_bp=preds_arr)
+    model.train()
+
+
 def save_checkpoint(state: dict, checkpoint_dir: Path, is_best: bool) -> None:
     epoch = state.get("epoch", 0)
     torch.save(state, checkpoint_dir / f"checkpoint_epoch_{epoch:03d}.pt")
@@ -162,6 +247,8 @@ def main() -> None:
 
     log_dir = ensure_dir(Path(args.log_dir) / dt.datetime.now().strftime("%Y%m%d_%H%M%S"))
     writer = SummaryWriter(log_dir=str(log_dir))
+    save_config(log_dir, args)
+    metrics_csv = init_metrics_csv(log_dir)
     checkpoint_dir = ensure_dir(args.checkpoint_dir)
     print(f"Training samples: {len(train_loader.dataset)} (fraction={args.train_fraction})")
     if val_loader is not None:
@@ -189,6 +276,9 @@ def main() -> None:
             )
         else:
             print(f"Epoch {epoch:03d} | train_loss={train_loss:.4f}")
+
+        append_metrics_row(metrics_csv, epoch, train_loss, val_metrics)
+        save_sample_predictions(epoch, val_loader, model, device, log_dir)
 
         save_checkpoint(
             {
